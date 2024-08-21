@@ -1,0 +1,6 @@
+<component name="CopyrightManager">
+  <copyright>
+    <option name="notice" value="Copyright (c) 华南理工大学学生创新团队 Last Update: &amp;#36;file.lastModified.format(&quot;yyyy-MM-dd HH:mm:ss&quot;). All Rights Reserved. &#10;&#10;@Project name and File name:&amp;#36;project.name - &amp;#36;file.fileName&#10;&#10;Redistribution and use in source and binary forms, with or without&#10;modification, are permitted provided that the following conditions are met:&#10;Redistributions of source code must retain the above copyright notice,&#10;this list of conditions and the following disclaimer.&#10;Redistributions in binary form must reproduce the above copyright&#10;notice, this list of conditions and the following disclaimer in the&#10;documentation and/or other materials provided with the distribution.&#10;Neither the name of the developer nor the names of its&#10;contributors may be used to endorse or promote products derived from&#10;this software without specific prior written permission.&#10;重新分发和使用源代码和二进制形式的代码，无论是否进行修改，都是允许的，只要满足以下条件：&#10;重新分发源代码时，必须保留上述版权通知、本条件列表以及以下免责声明。&#10;以二进制形式重新分发时，必须在分发时提供的文档或其他材料中复制上述版权通知、本条件列表以及以下免责声明。&#10;未经事先书面许可，不得使用开发者或贡献者的名称来认可或推广从本软件派生出来的产品。" />
+    <option name="myName" value="Default" />
+  </copyright>
+</component>

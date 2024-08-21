@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>ECharts</title>
+  <style>
+    body {
+            background-color: #000000; /* 黑色背景 */
+            color: #fff; /* 文本颜色为白色 */
+        }
+  </style>
+  <!-- 引入刚刚下载的 ECharts 文件 -->
+  <script src="js/echarts.js"></script>
+</head>
+
+<body>
+  <!-- 为 ECharts 准备一个定义了宽高的 DOM -->
+  <div id="main" style="width: 90vw;height:60vw;"></div>
+  <script type="text/javascript">
+    // 基于准备好的dom，初始化echarts实例
+    var myChart = echarts.init(document.getElementById('main'), 'dark');
+
+    // 计算sin函数值的函数  
+    function func(x) {
+      return Math.sin(x);
+    }
+
+    // 生成数据  
+    function generateData() {
+      let data = [];
+      for (let i = 0; i <= 360; i += 1) {
+        data.push([i, func(i / 180 * Math.PI)]); // 将角度转换为弧度  
+      }
+      return data;
+    }
+
+    var option = {
+      animation: false, // 禁用全局动画  
+      xAxis: {
+        type: 'value',
+        min: 0,
+        max: 360,
+        axisTick: {
+          show: false // 坐标轴刻度线，设置为false则不显示  
+        },
+        axisLabel: {
+          show: false // 坐标轴刻度标签，设置为false则不显示数字  
+        },
+        splitLine: {
+          show: false // 网格线，设置为false则不显示  
+        }
+      },
+      yAxis: {
+        type: 'value',
+        min: -1,
+        max: 1,
+        axisTick: {
+          show: false // 坐标轴刻度线，设置为false则不显示  
+        },
+        axisLabel: {
+          show: false // 坐标轴刻度标签，设置为false则不显示数字  
+        },
+        splitLine: {
+          show: false // 网格线，设置为false则不显示  
+        }
+      },
+      series: [{
+        data: generateData(),
+        type: 'line',
+        smooth: true // 曲线平滑  
+      }]
+    };
+    myChart.setOption(option);  
+  </script>
+</body>
+
+</html>
