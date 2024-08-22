@@ -6,9 +6,11 @@
   <title>ECharts</title>
   <style>
     body {
-            background-color: #000000; /* 黑色背景 */
-            color: #fff; /* 文本颜色为白色 */
-        }
+      background-color: #000000;
+      /* 黑色背景 */
+      color: #fff;
+      /* 文本颜色为白色 */
+    }
   </style>
   <!-- 引入刚刚下载的 ECharts 文件 -->
   <script src="js/echarts.js"></script>
@@ -27,12 +29,43 @@
     }
 
     // 生成数据  
-    function generateData() {
+    function generateSinData() {
       let data = [];
-      for (let i = 0; i <= 360; i += 1) {
-        data.push([i, func(i / 180 * Math.PI)]); // 将角度转换为弧度  
+      let period = 360;//周期
+      for (let i = 0; i <= period; i += 1) {
+        data.push([i, func(i / (period/2) * Math.PI)]); // 将角度转换为弧度  
       }
       return data;
+    }
+    function generateSquareData() {
+      let data = [];
+      let period = 360;//周期
+      for (let i = 0; i < period; i++) {
+        // 计算当前点是在周期中的哪个部分  
+        let phase = i % period;
+        // 如果当前点在前半周期，则值为1，否则为-1
+        let value = phase < (period/2) ? 1 : -1;
+        data.push([i, value]);
+      }
+      return data;
+    }
+    function generateRampData() {
+      let data = [];
+      let period = 360;//周期
+      let value = 0;
+      for(let i = 0;i < period; i++){
+        if(i<= period/4){
+          value = i * 1 / (period/4);
+          data.push([i,value]);
+        }else if(i <= 3*(period/4)){
+          value = i *( -1 / (period/4)) + 2;
+          data.push([i,value]);
+        }else{
+          value = i *( 1 / (period/4)) - 4;
+          data.push([i,value]);
+        }
+      }
+      return data
     }
 
     var option = {
@@ -65,13 +98,32 @@
           show: false // 网格线，设置为false则不显示  
         }
       },
+      dataset: {
+        source: generateSinData()
+      },
       series: [{
-        data: generateData(),
         type: 'line',
-        smooth: true // 曲线平滑  
+        smooth: true, // 曲线平滑  
+        encode: {
+          x: 0, // 映射数据集的第一个维度到 x 轴  
+          y: 1  // 映射数据集的第二个维度到 y 轴  
+        }
       }]
     };
     myChart.setOption(option);  
+
+    function switchToSin() {
+      option.dataset.source = generateSinData();
+      myChart.setOption(option);
+    }
+    function switchToSquare() {
+      option.dataset.source = generateSquareData();
+      myChart.setOption(option);
+    }
+    function switchToRamp() {
+      option.dataset.source = generateRampData();
+      myChart.setOption(option);
+    }
   </script>
 </body>
 

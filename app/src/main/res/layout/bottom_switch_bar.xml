@@ -28,6 +28,7 @@
     android:gravity="center">
     
     <Button
+        android:id="@+id/sinButton"
         android:layout_width="192dp"
         android:layout_height="wrap_content"
         android:layout_marginLeft="16dp"
@@ -35,6 +36,7 @@
         android:text="正弦波"
         android:textSize="24sp"/>
     <Button
+        android:id="@+id/squareButton"
         android:layout_width="192dp"
         android:layout_height="wrap_content"
         android:layout_marginLeft="16dp"
@@ -42,6 +44,7 @@
         android:text="方波"
         android:textSize="24sp"/>
     <Button
+        android:id="@+id/rampButton"
         android:layout_width="192dp"
         android:layout_height="wrap_content"
         android:layout_marginLeft="16dp"
@@ -49,6 +52,7 @@
         android:text="三角波"
         android:textSize="24sp"/>
     <Button
+        android:id="@+id/pulseButton"
         android:layout_width="192dp"
         android:layout_height="wrap_content"
         android:layout_marginLeft="16dp"

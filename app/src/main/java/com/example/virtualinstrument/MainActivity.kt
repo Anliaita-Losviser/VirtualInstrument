@@ -29,17 +29,23 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
@@ -48,22 +54,38 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.virtualinstrument.Common.IntentRequestCodes
-import com.example.virtualinstrument.UI.Adapters.BLEDeviceAdapter
+import com.example.virtualinstrument.Logic.BLEConnectionService
+import com.example.virtualinstrument.UI.RampParameterFragment
+import com.example.virtualinstrument.UI.SinParameterFragment
+import com.example.virtualinstrument.UI.SquareParameterFragment
 import com.example.virtualinstrument.Utils.LogUtil
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
 
+
 class MainActivity : BaseActivity() {
     @SuppressLint("SetJavaScriptEnabled")
+    //设备列表
     private val bleDeviceList = ArrayList<BluetoothDevice>()
+    //绑定服务
+    lateinit var BLEServiceBinder: BLEConnectionService.BLEBinder
+    private val connection = object : ServiceConnection{
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            //初始化binder
+            BLEServiceBinder = service as BLEConnectionService.BLEBinder
+        }
+        override fun onServiceDisconnected(name: ComponentName?) {
+        }
+    }
     
     val layoutManager = LinearLayoutManager(VIApp.context)
-    val layoutAdapter = BLEDeviceAdapter(bleDeviceList)
+    lateinit var layoutAdapter: BLEDeviceAdapter
     lateinit var bleDeviceDialog: AlertDialog
     //蓝牙适配器实例
     private lateinit var bluetoothManager: BluetoothManager
@@ -83,26 +105,27 @@ class MainActivity : BaseActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+        //检查设备是否支持BLE
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            Toast.makeText(VIApp.context, "设备不支持蓝牙BLE，将关闭", Toast.LENGTH_SHORT).show()
+            ActivityCollector.finishAllActivity()
+        }
         bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
         BLEScanner = bluetoothAdapter.bluetoothLeScanner
-        bleDeviceDialog = createBluetoothDevicesDialog(this)
-        val toolbar: Toolbar = findViewById(R.id.toolbar)//工具栏
-        setSupportActionBar(toolbar)
         
-        //设置悬浮按钮点击事件
-        val floatingButton: FloatingActionButton = findViewById(R.id.paramButton)
-        floatingButton.setOnClickListener{
-            AlertDialog.Builder(this).apply {
-                setPositiveButton(R.string.confirm){
-                    dialog, which->
-                }
-                setNegativeButton(R.string.cancel){
-                    dialog, which->
-                }
-                show()
-            }
-        }
+        //绑定服务并自动创建
+        val serviceIntent = Intent(this, BLEConnectionService::class.java)
+        bindService(serviceIntent,connection,Context.BIND_AUTO_CREATE)
+        
+        layoutAdapter = BLEDeviceAdapter(bleDeviceList)
+        //初始化自定义AlertDialog
+        bleDeviceDialog = createBluetoothDevicesDialog(this)
+        //初始化工具栏
+        val toolbar: Toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        //加载参数区
+        replaceFragment(SinParameterFragment())
         //显示图表
         val echarts: WebView = findViewById(R.id.echarts)
         echarts.settings.javaScriptEnabled = true
@@ -113,9 +136,36 @@ class MainActivity : BaseActivity() {
         echarts.settings.allowFileAccess = true
         echarts.webViewClient = WebViewClient()
         echarts.loadUrl("file:///android_asset/index.html")
-        
+        //设置底部按钮点击事件
+        val sinButton: Button = findViewById(R.id.sinButton)
+        sinButton.setOnClickListener{
+            echarts.evaluateJavascript("switchToSin()",null)
+            replaceFragment(SinParameterFragment())
+        }
+        val squareButton: Button = findViewById(R.id.squareButton)
+        squareButton.setOnClickListener{
+            echarts.evaluateJavascript("switchToSquare()",null)
+            replaceFragment(SquareParameterFragment())
+        }
+        val rampButton: Button = findViewById(R.id.rampButton)
+        rampButton.setOnClickListener {
+            echarts.evaluateJavascript("switchToRamp()",null)
+            replaceFragment(RampParameterFragment())
+        }
     }
     
+    override fun onDestroy() {
+        super.onDestroy()
+        unbindService(connection)
+    }
+    //切换Fragment
+    private fun replaceFragment(fragment: Fragment){
+        val fragmentManager = supportFragmentManager
+        //开启一个事务
+        val transaction = fragmentManager.beginTransaction()
+        transaction.replace(R.id.ParaArea,fragment)
+        transaction.commit()
+    }
     //设置tooBar菜单
     override fun onCreateOptionsMenu(menu: Menu?): Boolean{
         menuInflater.inflate(R.menu.toolbar , menu)
@@ -125,15 +175,12 @@ class MainActivity : BaseActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean{
         when(item.itemId) {
             //断开连接按钮点击事件
-            R.id.disConnect -> Toast.makeText(VIApp.context, R.string.disconnect_tip,
-                Toast.LENGTH_SHORT).show()
+            R.id.disConnect ->{
+                BLEServiceBinder.endConnection()
+                Toast.makeText(VIApp.context, R.string.disconnect_tip, Toast.LENGTH_SHORT).show()
+            }
             //连接按钮点击事件
             R.id.Connect -> {
-                //检查设备是否支持BLE
-                if (!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
-                    Toast.makeText(VIApp.context, "设备不支持蓝牙BLE，将关闭", Toast.LENGTH_SHORT).show()
-                    ActivityCollector.finishAllActivity()
-                }
                 //申请权限
                 XXPermissions.with(this)
                     // 申请蓝牙权限
@@ -168,11 +215,10 @@ class MainActivity : BaseActivity() {
         }
         return true
     }
-    
+    //检查蓝牙是否打开
     private fun CheckBTOpen(){
         if(ContextCompat.checkSelfPermission(VIApp.context,
                 Manifest.permission.BLUETOOTH_CONNECT)== PackageManager.PERMISSION_GRANTED) {
-            //检查蓝牙是否打开
             if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
                 val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
                 startActivityForResult(enableBtIntent, IntentRequestCodes.REQUEST_ENABLE_BT)
@@ -212,7 +258,7 @@ class MainActivity : BaseActivity() {
             LogUtil.i("扫描","停止扫描")
         }
     }
-    
+    //构造自定义的AlertDialog
     private fun createBluetoothDevicesDialog(context: Context):AlertDialog {
         //获取构造器
         val dialogBuilder = AlertDialog.Builder(context)
@@ -262,6 +308,47 @@ class MainActivity : BaseActivity() {
                         layoutAdapter.notifyDataSetChanged()
                     }
                 }
+            }
+        }
+    }
+    //recyclerView适配器
+    inner class BLEDeviceAdapter(val bleDeviceList: List<BluetoothDevice>): RecyclerView.Adapter<BLEDeviceAdapter.ViewHolder>(){
+        //用来缓存信息的内部类
+        inner class ViewHolder(deviceItemView: View) : RecyclerView.ViewHolder(deviceItemView){
+            val deviceName: TextView = deviceItemView.findViewById(R.id.device_name)
+        }
+        
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val View = LayoutInflater.from(parent.context)
+                .inflate(R.layout.bluetooth_device_item, parent, false)
+            val viewHolder = ViewHolder(View)
+            //给子项设置点击事件
+            viewHolder.itemView.setOnClickListener {
+                val position = viewHolder.bindingAdapterPosition
+                if (ActivityCompat.checkSelfPermission(
+                        VIApp.context,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    //启动连接操作
+                    BLEScanner.stopScan(leScanCallback)
+                    LogUtil.i("扫描","停止扫描")
+                    BLEServiceBinder.startConnection(bleDeviceList[position])
+                }
+            }
+            return viewHolder//缓存布局
+        }
+        
+        override fun getItemCount() = bleDeviceList.size
+        
+        override fun onBindViewHolder(holder: ViewHolder, position: Int){
+            val device = bleDeviceList[position]
+            if (ActivityCompat.checkSelfPermission(
+                    VIApp.context,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                holder.deviceName.text = device.name
             }
         }
     }
