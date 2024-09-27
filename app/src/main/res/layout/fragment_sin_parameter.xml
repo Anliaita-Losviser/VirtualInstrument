@@ -21,6 +21,7 @@
             android:textAlignment="center"
             android:padding="8dp"/>
         <EditText
+            android:id="@+id/sinFreq"
             android:layout_width="256dp"
             android:layout_height="match_parent"/>
         <TextView
@@ -44,6 +45,7 @@
             android:textAlignment="center"
             android:padding="8dp"/>
         <EditText
+            android:id="@+id/sinRange"
             android:layout_width="256dp"
             android:layout_height="match_parent"/>
         <TextView
@@ -67,6 +69,7 @@
             android:textAlignment="center"
             android:padding="8dp"/>
         <EditText
+            android:id="@+id/sinOffset"
             android:layout_width="256dp"
             android:layout_height="match_parent"/>
         <TextView
@@ -90,6 +93,7 @@
             android:textAlignment="center"
             android:padding="8dp"/>
         <EditText
+            android:id="@+id/sinPhase"
             android:layout_width="256dp"
             android:layout_height="match_parent"/>
         <TextView

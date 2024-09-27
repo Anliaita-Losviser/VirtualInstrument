@@ -63,7 +63,6 @@ import com.example.virtualinstrument.UI.RampParameterFragment
 import com.example.virtualinstrument.UI.SinParameterFragment
 import com.example.virtualinstrument.UI.SquareParameterFragment
 import com.example.virtualinstrument.Utils.LogUtil
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
