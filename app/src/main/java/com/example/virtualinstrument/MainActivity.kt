@@ -34,6 +34,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.AsyncTask
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -45,6 +46,7 @@ import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -59,13 +61,14 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.virtualinstrument.Common.IntentRequestCodes
 import com.example.virtualinstrument.Logic.BLEConnectionService
-import com.example.virtualinstrument.UI.RampParameterFragment
+import com.example.virtualinstrument.Logic.socketTests
 import com.example.virtualinstrument.UI.SinParameterFragment
-import com.example.virtualinstrument.UI.SquareParameterFragment
 import com.example.virtualinstrument.Utils.LogUtil
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
+import org.json.JSONArray
+import java.util.Arrays
 
 
 class MainActivity : BaseActivity() {
@@ -86,6 +89,8 @@ class MainActivity : BaseActivity() {
     val layoutManager = LinearLayoutManager(VIApp.context)
     lateinit var layoutAdapter: BLEDeviceAdapter
     lateinit var bleDeviceDialog: AlertDialog
+    lateinit var ipDeviceDialog: AlertDialog
+    private var ipDeviceAddress:String = ""
     //蓝牙适配器实例
     private lateinit var bluetoothManager: BluetoothManager
     private lateinit var bluetoothAdapter: BluetoothAdapter
@@ -94,7 +99,11 @@ class MainActivity : BaseActivity() {
     private val handler = Handler()
     // Stops scanning after 10 seconds.
     private val scanPeriod: Long = 10000
-    
+
+    private val socketTest = socketTests()
+    lateinit var updateUITask: UpdateUIAsyncTask
+    lateinit var echarts:WebView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -104,15 +113,43 @@ class MainActivity : BaseActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+
         //检查设备是否支持BLE
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             Toast.makeText(VIApp.context, "设备不支持蓝牙BLE，将关闭", Toast.LENGTH_SHORT).show()
             ActivityCollector.finishAllActivity()
         }
+
         bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
         BLEScanner = bluetoothAdapter.bluetoothLeScanner
-        
+
+        XXPermissions.with(this)
+            // 申请蓝牙权限
+            .permission(Permission.Group.BLUETOOTH)
+            // 设置权限请求拦截器（局部设置）
+            //.interceptor(new PermissionInterceptor())
+            // 设置不触发错误检测机制（局部设置）
+            //.unchecked()
+            .request(object : OnPermissionCallback {
+                override fun onGranted(permissions: MutableList<String>, allGranted: Boolean) {
+                    if (!allGranted) {
+                        LogUtil.i("权限","部分授权未授予")
+                        return
+                    }
+                    LogUtil.i("权限","授权完成")
+                }
+                override fun onDenied(permissions: MutableList<String>, doNotAskAgain: Boolean) {
+                    if (doNotAskAgain) {
+                        LogUtil.i("权限","被永久拒绝授权，请手动授予")
+                        // 如果是被永久拒绝就跳转到应用权限系统设置页面
+                        XXPermissions.startPermissionActivity(VIApp.context, permissions)
+                    } else {
+                        LogUtil.i("权限","获取权限失败")
+                    }
+                }
+            })
+
         //绑定服务并自动创建
         val serviceIntent = Intent(this, BLEConnectionService::class.java)
         bindService(serviceIntent,connection,Context.BIND_AUTO_CREATE)
@@ -120,13 +157,21 @@ class MainActivity : BaseActivity() {
         layoutAdapter = BLEDeviceAdapter(bleDeviceList)
         //初始化自定义AlertDialog
         bleDeviceDialog = createBluetoothDevicesDialog(this)
+        //读取ip数据
+        val pref = this.getSharedPreferences("instrumentPref", Context.MODE_PRIVATE)
+        ipDeviceAddress = pref?.getString("ipDeviceAddress", "").toString()
+        LogUtil.i("读缓存",ipDeviceAddress)
+        //初始化ip连接弹窗
+        ipDeviceDialog = createIPDeviceDialog(this)
+
+
         //初始化工具栏
         val toolbar: Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
         //加载参数区
         replaceFragment(SinParameterFragment())
         //显示图表
-        val echarts: WebView = findViewById(R.id.echarts)
+        echarts = findViewById(R.id.echarts)
         echarts.settings.javaScriptEnabled = true
         echarts.settings.javaScriptCanOpenWindowsAutomatically = true
         echarts.settings.domStorageEnabled = true
@@ -135,24 +180,17 @@ class MainActivity : BaseActivity() {
         echarts.settings.allowFileAccess = true
         echarts.webViewClient = WebViewClient()
         echarts.loadUrl("file:///android_asset/index.html")
-        //设置底部按钮点击事件
-        val sinButton: Button = findViewById(R.id.sinButton)
-        sinButton.setOnClickListener{
-            echarts.evaluateJavascript("switchToSin()",null)
-            replaceFragment(SinParameterFragment())
-        }
-        val squareButton: Button = findViewById(R.id.squareButton)
-        squareButton.setOnClickListener{
-            echarts.evaluateJavascript("switchToSquare()",null)
-            replaceFragment(SquareParameterFragment())
-        }
-        val rampButton: Button = findViewById(R.id.rampButton)
-        rampButton.setOnClickListener {
-            echarts.evaluateJavascript("switchToRamp()",null)
-            replaceFragment(RampParameterFragment())
-        }
     }
-    
+
+    override fun onPause() {
+        super.onPause()
+        //保存数据
+        LogUtil.i("onPause", "onPause执行")
+        val editor = this.getSharedPreferences("instrumentPref", Context.MODE_PRIVATE).edit()
+        editor.putString("ipDeviceAddress",ipDeviceAddress)
+        editor.apply()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         unbindService(connection)
@@ -175,41 +213,19 @@ class MainActivity : BaseActivity() {
         when(item.itemId) {
             //断开连接按钮点击事件
             R.id.disConnect ->{
-                BLEServiceBinder.endConnection()
+                updateUITask?.cancel(true)
+                socketTest.close()
                 Toast.makeText(VIApp.context, R.string.disconnect_tip, Toast.LENGTH_SHORT).show()
             }
             //连接按钮点击事件
             R.id.Connect -> {
-                //申请权限
-                XXPermissions.with(this)
-                    // 申请蓝牙权限
-                    .permission(Permission.Group.BLUETOOTH)
-                    // 设置权限请求拦截器（局部设置）
-                    //.interceptor(new PermissionInterceptor())
-                    // 设置不触发错误检测机制（局部设置）
-                    //.unchecked()
-                    .request(object : OnPermissionCallback {
-                        override fun onGranted(permissions: MutableList<String>, allGranted: Boolean) {
-                            if (!allGranted) {
-                                LogUtil.i("权限","部分授权未授予")
-                                return
-                            }
-                            LogUtil.i("权限","授权完成")
-                            CheckBTOpen()
-                            //弹出蓝牙设备列表
-                            bleDeviceDialog.show()
-                        }
-                        
-                        override fun onDenied(permissions: MutableList<String>, doNotAskAgain: Boolean) {
-                            if (doNotAskAgain) {
-                                LogUtil.i("权限","被永久拒绝授权，请手动授予")
-                                // 如果是被永久拒绝就跳转到应用权限系统设置页面
-                                XXPermissions.startPermissionActivity(VIApp.context, permissions)
-                            } else {
-                                LogUtil.i("权限","获取权限失败")
-                            }
-                        }
-                    })
+                //弹出IP地址输入框
+                ipDeviceDialog.show()
+            }
+            R.id.Select -> {
+                //初始化异步任务
+                updateUITask = UpdateUIAsyncTask()
+                updateUITask?.execute()
             }
         }
         return true
@@ -279,7 +295,36 @@ class MainActivity : BaseActivity() {
         val dialog = dialogBuilder.create()
         return dialog
     }
-    
+
+    //构建IP连接弹窗
+    private fun createIPDeviceDialog(context: Context):AlertDialog{
+        //获取构造器
+        val dialogBuilder = AlertDialog.Builder(context)
+        // Inflate the custom layout
+        val ipDeviceView = LayoutInflater.from(context).inflate(R.layout.ip_device_connect, null)
+        val ipAddressEditText: EditText = ipDeviceView.findViewById(R.id.ipaddress)
+        val confirm_connect:Button = ipDeviceView.findViewById(R.id.confirm_connect)
+        val cancel_connect:Button = ipDeviceView.findViewById(R.id.cancel_connect)
+        // Setup the dialog
+        dialogBuilder.setView(ipDeviceView)
+            .setTitle("IP连接")
+        // Create and show the dialog
+        val dialog = dialogBuilder.create()
+        //设置初始值
+        ipAddressEditText.setText(ipDeviceAddress)
+        //确认并发起连接
+        confirm_connect.setOnClickListener {
+            ipDeviceAddress = ipAddressEditText.text.toString()
+            //连接IP
+            socketTest.connect(ipAddressEditText.text.toString())
+            dialog.hide()
+        }
+        cancel_connect.setOnClickListener {
+            ipDeviceAddress = ipAddressEditText.text.toString()
+            dialog.hide()
+        }
+        return dialog
+    }
     //蓝牙扫描的结果回调函数
     private val leScanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -310,6 +355,60 @@ class MainActivity : BaseActivity() {
             }
         }
     }
+
+    //AsyncTask,刷新ui数据
+    inner class UpdateUIAsyncTask: AsyncTask<Unit, Array<Double>, Unit>(){
+        override fun onPreExecute() {
+            super.onPreExecute()
+            LogUtil.i("AsyncTask","任务开始执行")
+        }
+
+        override fun doInBackground(vararg params: Unit?) {
+            LogUtil.i("AsyncTask","任务正在执行")
+            //获取socket数据
+            var mstr = ""
+            while (socketTest.checkConnected()){
+                mstr = socketTest.receive()
+                LogUtil.i("AsyncTask","接收到：$mstr")
+                // 正则表达式匹配带有符号的数字
+                val regex = Regex("""([+-]?\d*\.?\d+)""")
+                // 查找所有匹配项
+                val matches = regex.findAll(mstr).map { it.value.toDouble() }.toMutableList()
+                // 将 ArrayList 转换为 Array
+                val matchesArray = matches.toTypedArray()
+                println("数组元素为:${matchesArray.contentToString()}")
+                publishProgress(matchesArray)
+            }
+        }
+
+        override fun onProgressUpdate(vararg values: Array<Double>?) {
+            super.onProgressUpdate(*values)
+            //更新ui
+            // 假设你有一个数组arrayToPass
+            //val arrayToPass = arrayOf("0.0", "0.8", "1.2")
+            //val arrayToPass = arrayOf(0.0, 0.8, 1.2)
+            // 将数组转换为JSON字符串
+            LogUtil.e("json","json原始数据:${values[0].contentToString()}")
+            val jsonArray = JSONArray(values[0])
+            val jsonString = jsonArray.toString()
+
+            LogUtil.e("webview", jsonString)
+
+            //echarts.evaluateJavascript("javascript:switchToRamp()",null)
+            echarts.evaluateJavascript("javascript:accept('"+ jsonString +"')",null)
+        }
+
+        override fun onPostExecute(result: Unit?) {
+            super.onPostExecute(result)
+            LogUtil.i("AsyncTask","任务执行完毕")
+        }
+
+        override fun onCancelled() {
+            LogUtil.i("AsyncTask","任务被取消")
+            super.onCancelled()
+        }
+    }
+
     //recyclerView适配器
     inner class BLEDeviceAdapter(val bleDeviceList: List<BluetoothDevice>): RecyclerView.Adapter<BLEDeviceAdapter.ViewHolder>(){
         //用来缓存信息的内部类

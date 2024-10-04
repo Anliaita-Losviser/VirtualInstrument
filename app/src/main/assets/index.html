@@ -47,6 +47,7 @@
         let value = phase < (period/2) ? 1 : -1;
         data.push([i, value]);
       }
+      //console.log(data);
       return data;
     }
     function generateRampData() {
@@ -65,6 +66,7 @@
           data.push([i,value]);
         }
       }
+      //console.log(data);
       return data
     }
 
@@ -73,21 +75,21 @@
       xAxis: {
         type: 'value',
         min: 0,
-        max: 360,
+        max: 50,
         axisTick: {
-          show: false // 坐标轴刻度线，设置为false则不显示  
+          show: false // 坐标轴刻度线，设置为false则不显示
         },
         axisLabel: {
           show: false // 坐标轴刻度标签，设置为false则不显示数字  
         },
         splitLine: {
-          show: false // 网格线，设置为false则不显示  
+          show: true // 网格线，设置为false则不显示
         }
       },
       yAxis: {
         type: 'value',
-        min: -1,
-        max: 1,
+        min: -127,
+        max: 127,
         axisTick: {
           show: false // 坐标轴刻度线，设置为false则不显示  
         },
@@ -95,7 +97,7 @@
           show: false // 坐标轴刻度标签，设置为false则不显示数字  
         },
         splitLine: {
-          show: false // 网格线，设置为false则不显示  
+          show: true // 网格线，设置为false则不显示
         }
       },
       dataset: {
@@ -110,7 +112,7 @@
         }
       }]
     };
-    myChart.setOption(option);  
+    myChart.setOption(option);
 
     function switchToSin() {
       option.dataset.source = generateSinData();
@@ -122,6 +124,21 @@
     }
     function switchToRamp() {
       option.dataset.source = generateRampData();
+      myChart.setOption(option);
+    }
+    function accept(data) {
+      tmpstr = JSON.stringify(data);
+      console.log(tmpstr);
+      // splitArr对象中保存的就是传递过来的数组
+      splitArr = JSON.parse(tmpstr.substring(1, tmpstr.length - 1))
+      console.log(splitArr);
+
+      let res = [];
+      for(let i = 0; i < splitArr.length; i++) {
+        res.push([i,splitArr[i]]);
+      }
+      console.log(res);  // 打印出处理后的数据
+      option.dataset.source = res;
       myChart.setOption(option);
     }
   </script>
