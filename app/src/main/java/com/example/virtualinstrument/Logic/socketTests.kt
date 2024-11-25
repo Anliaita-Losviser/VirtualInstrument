@@ -37,10 +37,7 @@ class socketTests {
     private lateinit var outStream: OutputStream
 
     fun checkConnected():Boolean{
-        return if (isConnected)
-            true
-        else
-            false
+        return isConnected
     }
 
     fun connect(socketAddress: String){
@@ -90,14 +87,13 @@ class socketTests {
         val bytes = ByteArray(1024)
         var str = ""
         try {
-            inStream.read(bytes)
+            inStream?.read(bytes)
             str = String(bytes,charset("ascii"))
             //LogUtil.i("socket数据","接收到：$str")
             return str
         }catch (e:IOException){
             LogUtil.e("socket数据",e.toString())
             close()
-            isConnected = false
             return str
         }
     }

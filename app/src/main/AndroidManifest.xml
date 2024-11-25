@@ -20,6 +20,7 @@
     <uses-feature
         android:name="android.hardware.bluetooth"
         android:required="true" />
+    <uses-feature android:name="android.hardware.usb.host"/>
 
     <application
         android:name=".VIApp"
@@ -44,7 +45,6 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
-            android:label=""
             tools:ignore="DiscouragedApi" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

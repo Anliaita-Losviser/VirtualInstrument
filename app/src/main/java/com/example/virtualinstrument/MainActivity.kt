@@ -23,18 +23,24 @@ package com.example.virtualinstrument
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.os.AsyncTask
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -50,30 +56,33 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.fragment.app.Fragment
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.virtualinstrument.Common.IntentRequestCodes
 import com.example.virtualinstrument.Logic.BLEConnectionService
 import com.example.virtualinstrument.Logic.socketTests
-import com.example.virtualinstrument.UI.SinParameterFragment
+import com.example.virtualinstrument.Logic.usbConnectTest
 import com.example.virtualinstrument.Utils.LogUtil
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
 import org.json.JSONArray
-import java.util.Arrays
 
-
+private const val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
 class MainActivity : BaseActivity() {
     @SuppressLint("SetJavaScriptEnabled")
-    //设备列表
+    lateinit var USBManager : UsbManager
+
+    //创建设备列表
     private val bleDeviceList = ArrayList<BluetoothDevice>()
     //绑定服务
     lateinit var BLEServiceBinder: BLEConnectionService.BLEBinder
@@ -88,22 +97,31 @@ class MainActivity : BaseActivity() {
     
     val layoutManager = LinearLayoutManager(VIApp.context)
     lateinit var layoutAdapter: BLEDeviceAdapter
+    //声明蓝牙弹窗
     lateinit var bleDeviceDialog: AlertDialog
+    //声明IP弹窗
     lateinit var ipDeviceDialog: AlertDialog
     private var ipDeviceAddress:String = ""
+
     //蓝牙适配器实例
     private lateinit var bluetoothManager: BluetoothManager
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private lateinit var BLEScanner: BluetoothLeScanner//扫描器
-    private var scanning = false
+    private var scanning = false//扫描状态标志位
     private val handler = Handler()
-    // Stops scanning after 10 seconds.
+    // 10秒停止扫描
     private val scanPeriod: Long = 10000
 
+    //初始化socket类实例
     private val socketTest = socketTests()
+    //初始化USB连接器
+    private val usbtest = usbConnectTest()
+    //初始化异步任务
     lateinit var updateUITask: UpdateUIAsyncTask
     lateinit var echarts:WebView
 
+    //--onCreate函数--//
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -157,20 +175,29 @@ class MainActivity : BaseActivity() {
         layoutAdapter = BLEDeviceAdapter(bleDeviceList)
         //初始化自定义AlertDialog
         bleDeviceDialog = createBluetoothDevicesDialog(this)
-        //读取ip数据
+        //从本地缓存中读取保存的ip
         val pref = this.getSharedPreferences("instrumentPref", Context.MODE_PRIVATE)
         ipDeviceAddress = pref?.getString("ipDeviceAddress", "").toString()
         LogUtil.i("读缓存",ipDeviceAddress)
         //初始化ip连接弹窗
         ipDeviceDialog = createIPDeviceDialog(this)
-
+        //创建异步任务
+        updateUITask = UpdateUIAsyncTask()
+        //获取USBManager实例
+        USBManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        //val filter = IntentFilter(ACTION_USB_PERMISSION)
+        //registerReceiver(usbReceiver, filter, RECEIVER_NOT_EXPORTED)
 
         //初始化工具栏
         val toolbar: Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
-        //加载参数区
-        replaceFragment(SinParameterFragment())
-        //显示图表
+        //设置折叠菜单
+        supportActionBar?.let {
+            it.setDisplayHomeAsUpEnabled(true)
+            it.setHomeAsUpIndicator(R.drawable.open_sidebar)
+        }
+
+        //显示图表区域
         echarts = findViewById(R.id.echarts)
         echarts.settings.javaScriptEnabled = true
         echarts.settings.javaScriptCanOpenWindowsAutomatically = true
@@ -180,11 +207,17 @@ class MainActivity : BaseActivity() {
         echarts.settings.allowFileAccess = true
         echarts.webViewClient = WebViewClient()
         echarts.loadUrl("file:///android_asset/index.html")
+
+        //设置弹出菜单的点击事件
+        val verticalsub:Button = findViewById(R.id.verticalsub)
+        verticalsub.setOnClickListener {
+            usbtest.send()
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        //保存数据
+        //保存数据到SharedPreferences
         LogUtil.i("onPause", "onPause执行")
         val editor = this.getSharedPreferences("instrumentPref", Context.MODE_PRIVATE).edit()
         editor.putString("ipDeviceAddress",ipDeviceAddress)
@@ -193,39 +226,47 @@ class MainActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        //解除服务绑定
         unbindService(connection)
+        //unregisterReceiver(usbReceiver)
     }
-    //切换Fragment
-    private fun replaceFragment(fragment: Fragment){
-        val fragmentManager = supportFragmentManager
-        //开启一个事务
-        val transaction = fragmentManager.beginTransaction()
-        transaction.replace(R.id.ParaArea,fragment)
-        transaction.commit()
-    }
+
     //设置tooBar菜单
     override fun onCreateOptionsMenu(menu: Menu?): Boolean{
         menuInflater.inflate(R.menu.toolbar , menu)
         return true
     }
-    //tooBar菜单的点击事件
+    //设置tooBar菜单的点击事件
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onOptionsItemSelected(item: MenuItem): Boolean{
         when(item.itemId) {
             //断开连接按钮点击事件
             R.id.disConnect ->{
                 updateUITask?.cancel(true)
                 socketTest.close()
+                usbtest.close()
                 Toast.makeText(VIApp.context, R.string.disconnect_tip, Toast.LENGTH_SHORT).show()
             }
             //连接按钮点击事件
             R.id.Connect -> {
                 //弹出IP地址输入框
-                ipDeviceDialog.show()
+                //ipDeviceDialog.show()
+                //
+                val filter = IntentFilter(ACTION_USB_PERMISSION)
+                registerReceiver(usbReceiver, filter, RECEIVER_NOT_EXPORTED)
+                val mPermissionIntent:PendingIntent = PendingIntent.getBroadcast(this, 0, Intent(ACTION_USB_PERMISSION),
+                    PendingIntent.FLAG_IMMUTABLE)
+                usbtest.connect(USBManager,mPermissionIntent)
             }
+            //选择按钮点击事件
             R.id.Select -> {
                 //初始化异步任务
                 updateUITask = UpdateUIAsyncTask()
                 updateUITask?.execute()
+            }
+            android.R.id.home -> {
+                val main: DrawerLayout = findViewById(R.id.main)
+                main.openDrawer(GravityCompat.END)
             }
         }
         return true
@@ -240,7 +281,7 @@ class MainActivity : BaseActivity() {
             }
         }
     }
-    //扫描设备
+    //扫描蓝牙设备
     private fun ScanDevices(){
         if (!scanning) { // Stops scanning after a pre-defined scan period.
             handler.postDelayed({
@@ -273,7 +314,7 @@ class MainActivity : BaseActivity() {
             LogUtil.i("扫描","停止扫描")
         }
     }
-    //构造自定义的AlertDialog
+    //构造自定义的AlertDialog，弹出蓝牙设备列表
     private fun createBluetoothDevicesDialog(context: Context):AlertDialog {
         //获取构造器
         val dialogBuilder = AlertDialog.Builder(context)
@@ -356,7 +397,7 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    //AsyncTask,刷新ui数据
+    //AsyncTask,异步刷新ui数据
     inner class UpdateUIAsyncTask: AsyncTask<Unit, Array<Double>, Unit>(){
         override fun onPreExecute() {
             super.onPreExecute()
@@ -449,5 +490,24 @@ class MainActivity : BaseActivity() {
                 holder.deviceName.text = device.name
             }
         }
+    }
+    //USB 广播接收器
+    private val usbReceiver = object : BroadcastReceiver(){
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (ACTION_USB_PERMISSION == intent?.action) {
+                synchronized(this) {
+                    val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        device?.apply {
+                            // call method to set up accessory communication
+                            // USB 权限已授权，可以进行相应的操作
+                        }
+                    } else {
+                        LogUtil.e("usb","USB未授权")
+                    }
+                }
+            }
+        }
+
     }
 }

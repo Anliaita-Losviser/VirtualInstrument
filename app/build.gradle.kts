@@ -39,7 +39,8 @@ android {
 }
 
 dependencies {
-    implementation (libs.xxpermissions)
+    implementation(libs.xxpermissions)
+    implementation("com.github.mik3y:usb-serial-for-android:3.8.0")
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
