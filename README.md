@@ -37,4 +37,4 @@
 
 ## 许可证
 
-本项目基于Apache License, Version 2.0许可证发布。
+本项目基于MIT许可证发布。详情请参阅[LICENSE](LICENSE)文件。
