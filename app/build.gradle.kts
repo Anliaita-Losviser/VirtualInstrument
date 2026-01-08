@@ -37,7 +37,7 @@ plugins {
 
 android {
     namespace = "com.example.virtualinstrument"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures {
         viewBinding = true
@@ -68,7 +68,7 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    buildToolsVersion = "35.0.0"
+    buildToolsVersion = "36.0.0"
 }
 
 dependencies {
